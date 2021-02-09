@@ -64,7 +64,7 @@ class Board{
             let tags = i.tags;
             let moves = i.moves;
             if(tags.includes("blocked")){
-                let blocker = [x + i.by[0], y + i.by[1]];
+                let blocker = [x + i.by[0], y + i.by[1] * dir];
                 if(this.get_tile(...blocker) != null){
                     continue;
                 }
