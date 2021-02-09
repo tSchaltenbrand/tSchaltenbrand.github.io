@@ -104,6 +104,23 @@ class Board{
                         coord = [coord[0] + v[0], coord[1] + v[1] * dir];
                     }
                 }
+            }else if(tags.includes("castle")){
+                if(self.has_moved)continue;
+                for(let v of moves){
+                    let coord = [x + v[0], y + v[1] * dir];
+                    while(this.is_inside(...coord)){
+                        let t = this.get_tile(...coord);
+                        if(t != null){
+                            if(t.get_tags().includes("castle") && !t.has_moved){
+                                console.log(t)
+                                let dest = [x + v[0] * i.distance, y + v[1] * dir * i.distance]
+                                valid.push([dest[0], dest[1], {"castle":{"orig": coord, "dest": [dest[0] - v[0], dest[1] - v[1] * dir]}}]);
+                            }
+                            break;
+                        }
+                        coord = [coord[0] + v[0], coord[1] + v[1] * dir];
+                    }
+                }
             }
         }
         return valid;
@@ -176,11 +193,18 @@ class Board{
     }
 
     has_array(a, b){
-        //assumes same length
+        //assumes length 2 for coords
         for(let i of a){
-            if(this.array_equal(i, b))return true;
+            if(this.array_equal(i.slice(0, 2), b))return true;
         }
         return false;
+    }
+
+    get_array(a, b){
+        for(let i of a){
+            if(this.array_equal(i.slice(0, 2), b))return i;
+        }
+        return null;
     }
 
     is_inside(x, y){
@@ -194,8 +218,19 @@ class Board{
         return null;
     }
 
-    move_tile(tx, ty, fx, fy, p){
-        if(this.set_tile(tx, ty, p)){
+    move_tile(tx, ty, fx, fy, p, valid){
+        let extra = true;
+        if(valid){
+            let move = this.get_array(valid, [tx, ty]);
+            if(move.length > 2 && move[2] != null){
+                let data = move[2];
+                if("castle" in data){
+                    let t = this.get_tile(...data.castle.orig);
+                    extra = this.move_tile(...data.castle.dest, ...data.castle.orig, t);
+                }
+            }
+        }
+        if(extra && this.set_tile(tx, ty, p)){
             p.has_moved = true;
             this.tiles[fx][fy] = null;
             return true;
@@ -276,6 +311,7 @@ class Piece{
     }
 
     static ROOK = {
+        "tags": ["castle"],
         "moves": [
             {"moves": [[1, 0], [-1, 0], [0, 1], [0, -1]], "tags": ["repeat"]}
         ],
@@ -310,8 +346,10 @@ class Piece{
 
     static KING = {
         //needs handlers for checks
+        "tags": ["king"],
         "moves": [
             {"moves": [[0, 1], [0, -1], [-1, 0], [1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1]], "tags": ["jump", "king"]},
+            {"moves": [[1, 0], [-1, 0]], "tags": ["castle", "king"], "distance": 2}
             //add castling
         ],
         "icon": {
@@ -346,6 +384,10 @@ class Piece{
 
     get_moves(){
         return this.preset.moves;
+    }
+
+    get_tags(){
+        return this.preset.tags != null ? this.preset.tags : [];
     }
 
     get_draw(){
