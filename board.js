@@ -22,6 +22,11 @@ function init(){
     board.set_tile(5, 0, new Piece(Piece.BISHOP, "black"));
     board.set_tile(6, 0, new Piece(Piece.KNIGHT, "black"));
     board.set_tile(7, 0, new Piece(Piece.ROOK, "black"));
+    for(let i = 0; i < 8; i++){
+        board.set_tile(i, 1, new Piece(Piece.PAWN, "black"));
+        board.set_tile(i, 6, new Piece(Piece.PAWN, "white"));
+    }
+
 
     board.set_tile(0, 7, new Piece(Piece.ROOK, "white"));
     board.set_tile(1, 7, new Piece(Piece.KNIGHT, "white"));
@@ -50,31 +55,54 @@ class Board{
         this.selected_piece = null;
     }
 
-    get_valid_moves(x, y, moves){
+    //tags jump noncapture captureonly first blocked repeat king selfcapture
+    get_valid_moves(x, y, movements){
         let valid = []
-        if("jumps" in moves){
-            for(let c of moves.jumps){
-                let coord = [x + c[0], y + c[1]]
-                if(this.is_inside(...coord)){
-                    if(this.get_tile(...coord) == null || this.get_tile(x, y).color != this.get_tile(...coord).color){
-                        valid.push(coord);
-                    }
+        let self = this.get_tile(x, y);
+        let dir = self.color == "white" ? -1 : 1;
+        for(let i of movements){
+            let tags = i.tags;
+            let moves = i.moves;
+            if(tags.includes("blocked")){
+                let blocker = [x + i.by[0], y + i.by[1]];
+                if(this.get_tile(...blocker) != null){
+                    continue;
                 }
             }
-        }
-        if("repeats" in moves){
-            for(let v of moves.repeats){
-                let coord = [x + v[0], y + v[1]];
-                while(this.is_inside(...coord)){
-                    let t = this.get_tile(...coord);
-                    if(t != null){
-                        if(t.color != this.get_tile(x, y).color){
+            if(tags.includes("first") && self.has_moved)continue;
+            if(tags.includes("jump")){
+                for(let c of moves){
+                    let coord = [x + c[0], y + c[1] * dir]
+                    if(this.is_inside(...coord)){
+                        let t = this.get_tile(...coord);
+                        if(t == null){
+                            if(tags.includes("captureonly"))continue;
                             valid.push(coord);
+                        }else{
+                            if(tags.includes("noncapture"))continue;
+                            if((tags.includes("selfcapture") && t.color == self.color) || self.color != t.color){
+                                valid.push(coord);
+                            }
                         }
-                        break;
                     }
-                    valid.push(coord);
-                    coord = [coord[0] + v[0], coord[1] + v[1]];
+                }
+            }else if(tags.includes("repeat")){
+                for(let v of moves){
+                    let coord = [x + v[0], y + v[1] * dir];
+                    while(this.is_inside(...coord)){
+                        let t = this.get_tile(...coord);
+                        if(t == null){
+                            if(tags.includes("captureonly"))continue;
+                        }else{
+                            if(tags.includes("noncapture"))break;
+                            if((tags.includes("selfcapture") && t.color == self.color) || self.color != t.color){
+                                valid.push(coord);
+                            }
+                            break;
+                        }
+                        valid.push(coord);
+                        coord = [coord[0] + v[0], coord[1] + v[1] * dir];
+                    }
                 }
             }
         }
@@ -168,6 +196,7 @@ class Board{
 
     move_tile(tx, ty, fx, fy, p){
         if(this.set_tile(tx, ty, p)){
+            p.has_moved = true;
             this.tiles[fx][fy] = null;
             return true;
         }
@@ -236,9 +265,9 @@ class Board{
 
 class Piece{
     static KNIGHT = {
-        "moves": {
-            "jumps": [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]]
-        },
+        "moves": [
+            {"moves": [[1, 2], [2, 1], [-1, 2], [2, -1], [1, -2], [-2, 1], [-1, -2], [-2, -1]], "tags": ["jump"]}
+        ],
         "icon": {
             "type": "char",
             "white": "♘",
@@ -247,9 +276,9 @@ class Piece{
     }
 
     static ROOK = {
-        "moves":{
-            "repeats": [[0, 1], [0, -1], [-1, 0], [1, 0]]
-        },
+        "moves": [
+            {"moves": [[1, 0], [-1, 0], [0, 1], [0, -1]], "tags": ["repeat"]}
+        ],
         "icon": {
             "type": "char",
             "white": "♖",
@@ -258,9 +287,9 @@ class Piece{
     }
 
     static BISHOP = {
-        "moves":{
-            "repeats": [[1, 1], [-1, -1], [-1, 1], [1, -1]]
-        },
+        "moves": [
+            {"moves": [[1, 1], [-1, -1], [-1, 1], [1, -1]], "tags": ["repeat"]}
+        ],
         "icon": {
             "type": "char",
             "white": "♗",
@@ -269,9 +298,9 @@ class Piece{
     }
 
     static QUEEN = {
-        "moves":{
-            "repeats": [[0, 1], [0, -1], [-1, 0], [1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1]]
-        },
+        "moves": [
+            {"moves": [[0, 1], [0, -1], [-1, 0], [1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1]], "tags": ["repeat"]}
+        ],
         "icon": {
             "type": "char",
             "white": "♕",
@@ -281,9 +310,10 @@ class Piece{
 
     static KING = {
         //needs handlers for checks
-        "moves":{
-            "jumps": [[0, 1], [0, -1], [-1, 0], [1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1]]
-        },
+        "moves": [
+            {"moves": [[0, 1], [0, -1], [-1, 0], [1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1]], "tags": ["jump", "king"]},
+            //add castling
+        ],
         "icon": {
             "type": "char",
             "white": "♔",
@@ -291,6 +321,19 @@ class Piece{
         }
     }
 
+    static PAWN = {
+        "moves":[
+            {"moves": [[0, 1]], "tags": ["jump", "noncapture"]},
+            {"moves": [[1, 1], [-1, 1]], "tags": ["captureonly", "jump"]}, //en passant as well?
+            {"moves": [[0, 2]], "tags": ["first", "noncapture", "blocked", "jump"], "by": [0, 1]}
+        ],
+        "icon": {
+            "type": "char",
+            "white": "♙",
+            "black": "♟"
+        }
+    }
+    //tags jump noncapture captureonly first blocked repeat king
     constructor(preset, color){
         this.preset = preset;
         this.color = color;
@@ -298,6 +341,7 @@ class Piece{
         this.is_drag = false;
         this.drag_x = 0;
         this.drag_y = 0;
+        this.has_moved = false;
     }
 
     get_moves(){
