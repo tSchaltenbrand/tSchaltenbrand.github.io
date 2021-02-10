@@ -40,9 +40,8 @@ function init(){
 }
 
 function mouse_handler(event){
-    if(board.mouse_events(event)){
-        board.draw(context);
-    }
+    board.mouse_events(event)
+    board.draw(context);
 }
 
 class Board{
@@ -57,6 +56,8 @@ class Board{
             "white": [],
             "black": []
         }
+        this.mouse_x = 0;
+        this.mouse_y = 0;
     }
 
     //tags jump noncapture captureonly first blocked repeat king selfcapture
@@ -130,40 +131,51 @@ class Board{
         return valid;
     }
 
-    select(x, y, mx, my){
+    select(x, y){
         let tile = this.get_tile(x, y);
         if(tile != null){
             let valid = this.get_valid_moves(x, y, tile.get_moves());
             this.selected_piece = [x, y, tile, valid];
             this.selected_piece[2].is_drag = true;
-            this.selected_piece[2].drag_x = mx / this.size_x;
-            this.selected_piece[2].drag_y = my / this.size_y;
+            this.update_drag();
             return true;
         }
         return false;
     }
 
+    update_drag(){
+        this.selected_piece[2].drag_x = this.mouse_x / this.size_x;
+        this.selected_piece[2].drag_y = this.mouse_y / this.size_y;
+    }
+
+    get_mouse_tile(){
+        return [
+            Math.floor(this.mouse_x / this.size_x),
+            Math.floor(this.mouse_y / this.size_y)
+        ];
+    }
+
     mouse_events(event){
         var btn = event.button;
-        var x = event.offsetX;
-        var y = event.offsetY;
+        this.mouse_x = event.offsetX;
+        this.mouse_y = event.offsetY;
         var type = event.type;
         if(btn != 0)return;
-        var tx = Math.floor(x / this.size_x);
-        var ty = Math.floor(y / this.size_y);
+        var mc = this.get_mouse_tile();
+        var tx = mc[0];
+        var ty = mc[1];
         switch(type){
             case "mousedown":
                 if(this.selected_piece == null){
-                    return this.select(tx, ty, x, y);
+                    return this.select(tx, ty);
                 }else{
                     if(tx == this.selected_piece[0] && ty == this.selected_piece[1]){
                         this.selected_piece[2].is_drag = !this.selected_piece[2].is_drag;
-                        this.selected_piece[2].drag_x = x / this.size_x;
-                        this.selected_piece[2].drag_y = y / this.size_y;
+                        this.update_drag();
                         return true;
                         //stop drag
                     }else if(!this.has_array(this.selected_piece[3], [tx, ty])){
-                        return this.select(tx, ty, x, y);
+                        return this.select(tx, ty);
                     }
                     //place selected piece if valid
                     //actions are on mouse up^
@@ -188,8 +200,7 @@ class Board{
             case "mousemove":
                 if(this.selected_piece == null)return;
                 if(this.selected_piece[2].is_drag){
-                    this.selected_piece[2].drag_x = x / this.size_x;
-                    this.selected_piece[2].drag_y = y / this.size_y;
+                    this.update_drag();
                     return true;
                 }
                 break
@@ -296,14 +307,32 @@ class Board{
             check = check == 0 ? 1 : 0;
         }
         if(this.selected_piece != null){
+            let mc = this.get_mouse_tile();
             for(let i of this.selected_piece[3]){
+                let t = this.get_tile(...i);
                 ctx.fillStyle = "green";
-                ctx.globalAlpha = 0.5;
-                ctx.beginPath();
-                ctx.arc((i[0] + 0.5) * this.size_x, (i[1] + 0.5) * this.size_y, Math.min(this.size_x, this.size_y) / 4, 0, 2 * Math.PI, false);
-                ctx.fill();
-                ctx.globalAlpha = 1;
+                ctx.strokeStyle = "green";
+                if(i[0] == mc[0] && i[1] == mc[1]){
+                    ctx.globalAlpha = 0.2;
+                    ctx.fillRect(i[0] * this.size_x, i[1] * this.size_y, this.size_x, this.size_y);
+                }else if(t != null){
+                    ctx.lineWidth = "10";
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath();
+                    ctx.rect(i[0] * this.size_x + 5, i[1] * this.size_y + 5, this.size_x - 10, this.size_y - 10);
+                    ctx.stroke();
+                }else{
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath();
+                    ctx.arc((i[0] + 0.5) * this.size_x, (i[1] + 0.5) * this.size_y, Math.min(this.size_x, this.size_y) / 8, 0, 2 * Math.PI, false);
+                    ctx.fill();
+                }
             }
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(this.selected_piece[0] * this.size_x, this.selected_piece[1] * this.size_y, this.size_x, this.size_y);
+            ctx.globalAlpha = 0.5;
+            this.selected_piece[2].get_draw()(ctx, this.selected_piece[0], this.selected_piece[1], this.size_x, this.size_y);
+            ctx.globalAlpha = 1;
         }
         for(let i in this.tiles){
             for(let j in this.tiles[0]){
