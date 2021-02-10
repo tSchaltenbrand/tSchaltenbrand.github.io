@@ -53,6 +53,10 @@ class Board{
         this.checkered = true;
         this.check_colors = ["#f0d9b5", "#b58863"]
         this.selected_piece = null;
+        this.pockets = {
+            "white": [],
+            "black": []
+        }
     }
 
     //tags jump noncapture captureonly first blocked repeat king selfcapture
@@ -81,7 +85,7 @@ class Board{
                         }else{
                             if(tags.includes("noncapture"))continue;
                             if((tags.includes("selfcapture") && t.color == self.color) || self.color != t.color){
-                                valid.push(coord);
+                                valid.push([...coord, {"selfcapture": tags.includes("selfcapture")}]);
                             }
                         }
                     }
@@ -96,7 +100,7 @@ class Board{
                         }else{
                             if(tags.includes("noncapture"))break;
                             if((tags.includes("selfcapture") && t.color == self.color) || self.color != t.color){
-                                valid.push(coord);
+                                valid.push([...coord, {"selfcapture": tags.includes("selfcapture")}]);
                             }
                             break;
                         }
@@ -126,6 +130,19 @@ class Board{
         return valid;
     }
 
+    select(x, y, mx, my){
+        let tile = this.get_tile(x, y);
+        if(tile != null){
+            let valid = this.get_valid_moves(x, y, tile.get_moves());
+            this.selected_piece = [x, y, tile, valid];
+            this.selected_piece[2].is_drag = true;
+            this.selected_piece[2].drag_x = mx / this.size_x;
+            this.selected_piece[2].drag_y = my / this.size_y;
+            return true;
+        }
+        return false;
+    }
+
     mouse_events(event){
         var btn = event.button;
         var x = event.offsetX;
@@ -137,15 +154,7 @@ class Board{
         switch(type){
             case "mousedown":
                 if(this.selected_piece == null){
-                    var tile = this.get_tile(tx, ty);
-                    if(tile != null){
-                        let valid = this.get_valid_moves(tx, ty, tile.get_moves());
-                        this.selected_piece = [tx, ty, tile, valid];
-                        this.selected_piece[2].is_drag = true;
-                        this.selected_piece[2].drag_x = x / this.size_x;
-                        this.selected_piece[2].drag_y = y / this.size_y;
-                        return true;
-                    }
+                    return this.select(tx, ty, x, y);
                 }else{
                     if(tx == this.selected_piece[0] && ty == this.selected_piece[1]){
                         this.selected_piece[2].is_drag = !this.selected_piece[2].is_drag;
@@ -153,8 +162,11 @@ class Board{
                         this.selected_piece[2].drag_y = y / this.size_y;
                         return true;
                         //stop drag
+                    }else if(!this.has_array(this.selected_piece[3], [tx, ty])){
+                        return this.select(tx, ty, x, y);
                     }
                     //place selected piece if valid
+                    //actions are on mouse up^
                 }
                 break
             case "mouseup":
@@ -220,7 +232,8 @@ class Board{
 
     move_tile(tx, ty, fx, fy, p, valid){
         let extra = true;
-        if(valid){
+        let selfcap = false;
+        if(valid){ //checking move list, not validity
             let move = this.get_array(valid, [tx, ty]);
             if(move.length > 2 && move[2] != null){
                 let data = move[2];
@@ -228,17 +241,26 @@ class Board{
                     let t = this.get_tile(...data.castle.orig);
                     extra = this.move_tile(...data.castle.dest, ...data.castle.orig, t);
                 }
+                if("selfcapture" in data){
+                    selfcap = data.selfcapture;
+                }
             }
         }
-        if(extra && this.set_tile(tx, ty, p)){
+        if(extra && this.set_tile(tx, ty, p, selfcap)){
             p.has_moved = true;
             this.tiles[fx][fy] = null;
             return true;
         }
     }
 
-    set_tile(x, y, p){
-        if(this.get_tile(x, y) != null){
+    set_tile(x, y, p, selfcap){
+        let t = this.get_tile(x, y);
+        if(t != null){
+            if(t.color != p.color || selfcap){
+                this.pockets[p.color].push(t);
+                this.tiles[x][y] = p;
+                return true;
+            }
             //capture? or unhandled error?
         }else if(this.is_inside(x, y)){
             this.tiles[x][y] = p;
